@@ -6,6 +6,7 @@ import asyncio
 import aiohttp
 import json
 from dataclasses import dataclass
+import time
 
 from verl.tools.base_tool import BaseTool
 from verl.utils.rollout_trace import rollout_trace_op
@@ -86,8 +87,6 @@ class RemoteCodeInterpreter(BaseTool):
                 - reuse_sessions: 是否复用会话
         """
         super().__init__(config, tool_schema)
-        
-        # 解析配置
         self.service_config = RemoteServiceConfig(
             service_url=config.get("service_url", "http://localhost:8001"),
             timeout=config.get("timeout", 30),
@@ -96,14 +95,13 @@ class RemoteCodeInterpreter(BaseTool):
             session_timeout=config.get("session_timeout", 1800),
             reuse_sessions=config.get("reuse_sessions", True)
         )
-        
-        
-        # 实例管理
         self.instance_id2session_id: Dict[str, str] = {}
-        # HTTP 客户端配置
+        self.session_id2create_time: Dict[str, float] = {}  # 新增：记录session创建时间
         self._http_timeout = aiohttp.ClientTimeout(total=self.service_config.timeout)
-        
         logger.info(f"初始化远程代码解释器，服务地址: {self.service_config.service_url}")
+
+        # 启动后台清理任务
+        self._cleanup_task = asyncio.create_task(self._cleanup_expired_sessions())
 
     def get_openai_tool_schema(self) -> OpenAIFunctionToolSchema:
         return self.tool_schema
@@ -169,6 +167,7 @@ class RemoteCodeInterpreter(BaseTool):
                         if response.status == 200:
                             data = await response.json()
                             session_id = data["session_id"]
+                            self.session_id2create_time[session_id] = time.time()  # 记录创建时间
                             logger.debug(f"成功创建远程会话: {session_id}")
                             return session_id
                         
@@ -303,19 +302,14 @@ class RemoteCodeInterpreter(BaseTool):
         if instance_id not in self.instance_id2session_id:
             logger.warning(f"实例 {instance_id} 不存在或已被释放，无法释放")
             return 
-        
-        # 删除远程会话
         session_id = self.instance_id2session_id[instance_id]
-        
-        # 如果不复用会话，删除远程会话
         try:
             await self._delete_remote_session(session_id)
             self.instance_id2session_id.pop(instance_id, None)
+            self.session_id2create_time.pop(session_id, None)  # 删除创建时间记录
             logger.debug(f"成功释放实例 {instance_id}，删除远程会话 {session_id}")
         except Exception as e:
             logger.error(f"释放实例 {instance_id} 时删除远程会话失败: {e}")
-            
-            
 
     async def _delete_remote_session(self, session_id: str) -> None:
         """删除远程会话"""
@@ -330,4 +324,45 @@ class RemoteCodeInterpreter(BaseTool):
                         logger.warning(f"删除远程会话失败: {response.status}")
         except Exception as e:
             logger.error(f"删除远程会话时发生错误: {e}")
+
+    async def _cleanup_expired_sessions(self):
+        """定期清理超时的 session"""
+        while True:
+            now = time.time()
+            expired_sessions = [
+                sid for sid, ctime in self.session_id2create_time.items()
+                if now - ctime > self.service_config.session_timeout
+            ]
+            for sid in expired_sessions:
+                try:
+                    await self._delete_remote_session(sid)
+                    self.session_id2create_time.pop(sid, None)
+                    # 同时清理 instance_id2session_id
+                    for iid, ssid in list(self.instance_id2session_id.items()):
+                        if ssid == sid:
+                            self.instance_id2session_id.pop(iid, None)
+                    logger.info(f"自动清理超时 session: {sid}")
+                except Exception as e:
+                    logger.error(f"自动清理 session {sid} 失败: {e}")
+            await asyncio.sleep(60)  # 每分钟检查一次
+
+    async def _delete_all_sessions(self):
+        """删除所有已创建的远程会话"""
+        for session_id in list(self.session_id2create_time.keys()):
+            try:
+                await self._delete_remote_session(session_id)
+                logger.info(f"销毁时自动删除 session: {session_id}")
+            except Exception as e:
+                logger.error(f"销毁时删除 session {session_id} 失败: {e}")
+        self.session_id2create_time.clear()
+        self.instance_id2session_id.clear()
+
+    def __del__(self):
+        """对象销毁时自动清理所有 session"""
+        try:
+            # 由于 __del__ 不能直接调用异步方法，这里用 asyncio.run
+            if self.session_id2create_time:
+                asyncio.run(self._delete_all_sessions())
+        except Exception as e:
+            logger.error(f"对象销毁时自动清理 session 失败: {e}")
 
