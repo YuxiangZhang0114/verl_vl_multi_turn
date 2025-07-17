@@ -33,9 +33,13 @@ def base64_to_image(base64_str: str) -> Image.Image:
         if base64_str.startswith(prefix):
             base64_str = base64_str[len(prefix) :]
             break
-    image_data = base64.b64decode(base64_str)
-    image = Image.open(BytesIO(image_data))
-    return image
+    try:
+        image_data = base64.b64decode(base64_str)
+        image = Image.open(BytesIO(image_data))
+        return image
+    except Exception as e:
+        logger.error(f"base64转图片失败: {e}")
+        return None
 
 def scaling_image_by_max_size(image: Image.Image, max_size: int = 512) -> Image.Image:
     """
@@ -295,7 +299,7 @@ class RemoteCodeInterpreter(BaseTool):
 
     async def calc_reward(self, instance_id: str, **kwargs) -> str:
         """计算奖励"""
-        return self._instance_dict[instance_id]["reward"]
+        return None
 
     async def release(self, instance_id: str, **kwargs) -> None:
         """释放工具实例"""
