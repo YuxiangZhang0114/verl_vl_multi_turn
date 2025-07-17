@@ -36,6 +36,21 @@ def base64_to_image(base64_str: str) -> Image.Image:
     image = Image.open(BytesIO(image_data))
     return image
 
+def scaling_image_by_max_size(image: Image.Image, max_size: int = 512) -> Image.Image:
+    """
+    Scale an image to fit within a maximum size while maintaining aspect ratio.
+    """
+    width, height = image.size
+    if width > max_size or height > max_size:
+        scale = min(max_size / width, max_size / height)
+        new_width = int(width * scale)
+        new_height = int(height * scale)
+        try:
+            return image.resize((new_width, new_height), Image.LANCZOS)
+        except AttributeError:
+            return image.resize((new_width, new_height), Image.Resampling.LANCZOS)
+    return image
+
 @dataclass
 class RemoteServiceConfig:
     """远程服务配置"""
@@ -270,6 +285,8 @@ class RemoteCodeInterpreter(BaseTool):
             elif item_type == "image":
                 image_url = item.get("image_url")
                 image = base64_to_image(image_url)
+                image = scaling_image_by_max_size(image ,max_size=512)
+                
                 result_parts.append({'type': 'image', 'image': image})
         return result_parts
                 
