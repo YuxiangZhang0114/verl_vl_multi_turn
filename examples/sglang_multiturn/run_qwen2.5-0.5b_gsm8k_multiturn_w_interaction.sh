@@ -44,11 +44,18 @@ python3 -m verl.trainer.main_ppo \
     actor_rollout_ref.ref.fsdp_config.param_offload=$OFFLOAD \
     algorithm.use_kl_in_reward=False \
     trainer.critic_warmup=0 \
+<<<<<<< HEAD
     trainer.logger=['console','wandb'] \
     actor_rollout_ref.model.trust_remote_code=True \
     trainer.project_name='shunzi_gsm8k_async_rl' \
     trainer.experiment_name='qwen2.5-3b_function_rm-gsm8k-sgl-multi-w-interaction-n8' \
     trainer.n_gpus_per_node=1 \
+=======
+    trainer.logger='["console","wandb"]' \
+    trainer.project_name='gsm8k_async_rl' \
+    trainer.experiment_name='qwen2.5-0.5b_function_rm-gsm8k-sgl-multi-w-interaction-n8' \
+    trainer.n_gpus_per_node=8 \
+>>>>>>> 80d5870023fdb346d55a59a1d806bca0b8d11af0
     trainer.nnodes=1 \
     trainer.save_freq=-1 \
     trainer.test_freq=5 \
