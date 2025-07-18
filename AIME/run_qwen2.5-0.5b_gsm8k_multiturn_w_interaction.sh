@@ -8,20 +8,20 @@ ulimit -n 65535
 PROJECT_DIR="$(pwd)"
 CONFIG_PATH="$PROJECT_DIR/examples/sglang_multiturn/config"
 TRAIN_BATCH_SIZE=${TRAIN_BATCH_SIZE:-64}
-MICRO_BATCH_SIZE=${MICRO_BATCH_SIZE:-1}
-OFFLOAD=${OFFLOAD:-True}
+MICRO_BATCH_SIZE=${MICRO_BATCH_SIZE:-2}
+OFFLOAD=${OFFLOAD:-False}
 
 python3 -m verl.trainer.main_ppo \
     --config-path="$CONFIG_PATH" \
     --config-name='gsm8k_multiturn_grpo_w_interaction' \
     algorithm.adv_estimator=grpo \
     data.train_batch_size=$TRAIN_BATCH_SIZE \
-    data.max_prompt_length=1024 \
-    data.max_response_length=$((1024 * 3)) \
+    data.max_prompt_length=768 \
+    data.max_response_length=$((768 * 3)) \
     data.filter_overlong_prompts=True \
     data.truncation='error' \
     data.return_raw_chat=True \
-    actor_rollout_ref.model.path=Qwen/Qwen2.5-VL-3B-Instruct \
+    actor_rollout_ref.model.path=Qwen/Qwen2.5-0.5B-Instruct \
     actor_rollout_ref.model.use_remove_padding=True \
     actor_rollout_ref.model.enable_gradient_checkpointing=True \
     +actor_rollout_ref.model.enable_activation_offloading=True \
@@ -45,7 +45,6 @@ python3 -m verl.trainer.main_ppo \
     algorithm.use_kl_in_reward=False \
     trainer.critic_warmup=0 \
     trainer.logger=['console','wandb'] \
-    actor_rollout_ref.model.trust_remote_code=True \
     trainer.project_name='shunzi_gsm8k_async_rl' \
     trainer.experiment_name='qwen2.5-3b_function_rm-gsm8k-sgl-multi-w-interaction-n8' \
     trainer.n_gpus_per_node=1 \
@@ -53,7 +52,7 @@ python3 -m verl.trainer.main_ppo \
     trainer.save_freq=-1 \
     trainer.test_freq=5 \
     data.train_files=data/gsm8k/train.parquet \
-    data.val_files=data/gsm8k/test_head32.parquet \
+    data.val_files=data/gsm8k/test_head64.parquet \
     actor_rollout_ref.rollout.multi_turn.interaction_config_path="$PROJECT_DIR/examples/sglang_multiturn/config/interaction_config/gsm8k_interaction_config.yaml" \
     trainer.total_epochs=1 $@
 

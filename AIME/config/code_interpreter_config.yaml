@@ -1,22 +1,21 @@
 tools:
   - class_name: "AIME.tools.remote_code_interpreter.RemoteCodeInterpreter"
     config: 
-      # 远程服务配置
-      service_url: "http://localhost:8001"  # 远程服务地址
-      timeout: 15  # 请求超时时间（秒）
-      max_retries: 5  # 最大重试次数
-      retry_delay: 1.0  # 重试延迟时间（秒）
-      session_timeout: 1800  # 会话超时时间（秒）
-      reuse_sessions: true  # 是否复用会话
+      # Remote service configuration
+      service_url: "http://localhost:8001"  # Remote service address
+      timeout: 10  # Request timeout (seconds)
+      max_retries: 3  # Maximum retry count
+      retry_delay: 1.0  # Retry delay (seconds)
+      session_timeout: 1800  # Session timeout (seconds)
+      reuse_sessions: true  # Whether to reuse sessions
     tool_schema:
       type: "function"
       function:
         name: "code_interpreter"
-        description: "向一个持久化的远程Jupyter Notebook会话提交并执行一段Python代码。此会话会保留所有先前执行代码的状态（如变量和函数），可供后续调用。此函数仅用于执行代码，并会返回代码在Notebook中产生的文本或图片输出结果。注意：执行环境是非交互式的，不支持需要用户实时输入的函数（如 `input()`），并且对文件系统与网络的访问是受限的。"
+        description: "Submit and execute a piece of Python code to a persistent remote Jupyter Notebook session. The session retains all previously executed code states (such as variables and functions) for subsequent calls. This function is only for code execution and will return the textual or image output generated in the Notebook. Note: The execution environment is non-interactive, does not support functions requiring real-time user input (such as `input()`), and has restricted access to the file system and network."
         parameters:
           type: "object"
           properties:
             code:
               type: "string"
-              description: "要提交到远程Jupyter Notebook中执行的Python代码字符串。"
-          required: ["code"]
+              description: "The Python code string to be submitted and executed in the remote Jupyter Notebook."
