@@ -17,6 +17,7 @@ import logging
 import os
 from enum import Enum
 from typing import Any, Optional
+import PIL
 
 import torch
 from pydantic import BaseModel, ConfigDict, model_validator
@@ -408,50 +409,59 @@ class AsyncRolloutRequest(BaseModel):
     def add_tool_response_messages(
         self,
         processing_class: PreTrainedTokenizer | PreTrainedTokenizerFast | ProcessorMixin,
-        contents: list[str | dict[str, Any]],
+        contents: list[list[dict[str, Any]]],
     ) -> None:
         if not contents:
             return
         # We also handle the case when tool returns image
         # We require the processing of the image and video to be done at tool.execute() level
         delta_multi_modal_data = {key: [] for key in self.multi_modal_keys}
-        for content in contents:
-            if isinstance(content, dict):
-                content_list = []
-                # When we update multi_model_keys, we also need to update this logic
-                if "image" in content:
-                    if not isinstance(content["image"], list):
-                        raise ValueError(
-                            f"Image must be a list, but got {type(content['image'])}. Please check the tool.execute(). "
-                            f"For single images, wrap in a list: [image]. "
-                            f"Example: {{'image': [img1]}} or {{'image': [img1, img2, ...]}}."
-                        )
+        new_messages_len = 0
+        print(f"============ contents types: {type(contents)} =============")
+        print(f"============ contents: {contents} =============")
+        for contents_ in contents:
+            new_messages_len += len(contents_)
+            content_list = []
+            for content in contents_:
+                if isinstance(content, dict):
 
-                    content_list.extend([{"type": "image"} for _ in content["image"]])
-                    delta_multi_modal_data["image"].extend(content["image"])
-                if "video" in content:
-                    if not isinstance(content["video"], list):
+                    content_type = content.get("type", "unknown")
+                    if content_type not in ["image", "video", "text"]:
                         raise ValueError(
-                            f"Video must be a list, but got {type(content['video'])}. Please check the tool.execute(). "
-                            f"For single videos, wrap in a list: [video]. "
-                            f"Example: {{'video': [video1]}} or {{'video': [video1, video2, ...]}}."
-                        )
-
-                    content_list.extend([{"type": "video"} for _ in content["video"]])
-                    delta_multi_modal_data["video"].extend(content["video"])
-                if "text" in content:
-                    content_list.append({"type": "text", "text": content["text"]})
-                for key in content:
-                    if key not in ["image", "video", "text"]:
-                        logger.warning(
-                            f"Tool response message contains unexpected key: {key} "
+                            f"Tool response message contains unexpected type: {content_type} "
                             f"while we only support `image`, `video`, and `text`."
                         )
-                self.messages.append(Message(role="tool", content=content_list))
-            else:
-                self.messages.append(Message(role="tool", content=content))
+                        
+                    if content_type == "text":
+                        if not isinstance(content.get("text"), str):
+                            raise ValueError(
+                                f"Text content must be a string, but got {type(content.get('text'))}. "
+                                f"Please check the tool.execute()."
+                            )
+                        content_list.extend([{"type": "text", "text": content["text"]}])
 
-        messages = [*BASE_CHAT_HISTORY, *self.messages[-len(contents) :]]
+                    elif content_type == "image":
+                        if not isinstance(content.get("image"), PIL.Image.Image):
+                            raise ValueError(
+                                f"Image must be a PIL.Image.Image, but got {type(content.get('image'))}. "
+                                f"Please check the tool.execute(). "
+                                f"For single images, image should be a PIL.Image.Image object. "
+                                f"Example: {{'image': img1}}"
+                            )
+                        
+                        content_list.extend([{"type": "image"}])
+                        delta_multi_modal_data["image"].append(content["image"])
+                    elif content_type == "video":
+                        raise ValueError(
+                            f"Video type is not supported yet. Please check the tool.execute(). "
+                            f"For single videos, video should be a PIL.Image.Image object. "
+                            f"Example: {{'video': video1}}"
+                        )
+            self.messages.append(Message(role="tool", content=content_list))
+                
+        print(f"============ After tool call delta_multi_data  {delta_multi_modal_data} =============")
+
+        messages = [*BASE_CHAT_HISTORY, *self.messages[-new_messages_len :]]
         tools = [tool.model_dump() for tool in self.tool_schemas] if self.tool_schemas else None
 
         for key in self.multi_modal_keys:

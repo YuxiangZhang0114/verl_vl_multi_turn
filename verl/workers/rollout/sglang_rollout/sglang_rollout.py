@@ -297,6 +297,9 @@ class SGLangRollout(BaseRollout):
         self.interaction_map: dict[str, BaseInteraction] = self._initialize_interactions(config)
         # If turn on `free_cache_engine`, SGLang engine's KV cache
         # will be freed after each `generate_sequences` call.
+        print("============ SGLangRollout Tool =============")
+        print(self._tool_schemas)
+        print("===============================================")
         logger.info(
             f"tool_schemas: {self._tool_schemas}, tool_map: {self._tool_map}, tool_call_parser_type: "
             f"{self._tool_call_parser_type}, sgl_tools: {self._sgl_tools}, function_call_parser: "
@@ -515,6 +518,33 @@ class SGLangRollout(BaseRollout):
 
         tools_config_file = config.multi_turn.tool_config_path
         tool_list = initialize_tools_from_config(tools_config_file)
+        """tool_list: 从config文件中加载的工具列表。
+            [
+                {
+                "type": "function",
+                "function": {
+                    "name": "calc_geo3k_reward",
+                    "description": "A tool for calculating the reward of geo3k. (1.0 if parsed answer is correct, 0.0 if parsed answer is incorrect or not correctly parsed)",
+                    "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "answer": {
+                        "type": "string",
+                        "description": "The model's answer to the geo3k problem, must be a digits"
+                        }
+                    },
+                    "required": [
+                        "answer"
+                    ]
+                    }
+                }
+            }
+            ]
+            
+            tool_schemas: [{'type': 'function', 'function': {'name': 'calc_geo3k_reward', 'description': 'A tool for calculating the reward of geo3k. (1.0 if parsed answer is correct, 0.0 if parsed answer is incorrect or not correctly parsed)', 'parameters': {'type': 'object', 'properties': {'answer': {'type': 'string', 'description': "The model's answer to the geo3k problem, must be a digits", 'enum': None}}, 'required': ['answer']}, 'strict': False}}]
+            tool_map: {'calc_geo3k_reward': <verl.tools.geo3k_tool.Geo3kTool object at 0x7ff25685e830>}
+            sgl_tools: [Tool(type='function', function=Function(description='A tool for calculating the reward of geo3k. (1.0 if parsed answer is correct, 0.0 if parsed answer is incorrect or not correctly parsed)', name='calc_geo3k_reward', parameters={'type': 'object', 'properties': {'answer': {'type': 'string', 'description': "The model's answer to the geo3k problem, must be a digits", 'enum': None}}, 'required': ['answer']}, strict=False))]
+        """
 
         logger.info(f"Initialize tools from configuration.: tool_list: {tool_list}")
         tool_schemas = [tool.get_openai_tool_schema().model_dump() for tool in tool_list]
@@ -833,8 +863,13 @@ class SGLangRollout(BaseRollout):
 
         # Update with any additional kwargs
         request_sampling_params.update(kwargs)
+        
+        print("============ SGLangRollout Agent Loop Start =============")
+        
 
         while current_turns < self.config.multi_turn.max_assistant_turns:
+            print(f"============ {current_turns} turns ++++++++ _req.state = {_req.state} ++++++++ =============")
+            
             if _req.state == AsyncRolloutRequestStateEnum.PENDING:
                 await self._handle_pending_state(_req)
                 _req.state = AsyncRolloutRequestStateEnum.RUNNING
@@ -851,7 +886,10 @@ class SGLangRollout(BaseRollout):
                             for tool_call in parsed_tool_calls
                         ]
                     )
-                    _req.add_tool_response_messages(self.processing_class, [resp for resp, _, _ in tool_call_results])
+                    print(f"============ tool_call_results: {tool_call_results} =============")
+                    # tool_call_results: List[Tuple[list, none, none]]
+                    _req.add_tool_response_messages(self.processing_class, [resp[0] for resp in tool_call_results])
+                    # _req.add_tool_response_messages(self.processing_class, tool_call_results[0][0])
                     for tool_call, (resp, reward, metrics) in zip(parsed_tool_calls, tool_call_results, strict=True):
                         _req.update_metrics(metrics, tool_call.function.name)
                     if len(_req.input_ids) >= self.config.max_model_len:
@@ -868,6 +906,14 @@ class SGLangRollout(BaseRollout):
                     finish_reason_type = FinishReasonTypeEnum.LENGTH
                     break
 
+                print(f"============ multimodal data len: {len(_req.multi_modal_data['image'])} =============")
+                print(f"============ multimodal data type: {type(_req.multi_modal_data)} =============")
+                with open(os.path.join("/mnt/aime/user_workspace/shujiangming/verl_vl_multi_turn/verl/workers/rollout/sglang_rollout/", "sglang_rollout.log"), "a") as f:
+                    f.write(f"============ current_turns: {current_turns} =============\n")
+                    f.write(f"============ multimodal data len: {len(_req.multi_modal_data)} =============\n")
+                    f.write(f"============ multimodal data type: {type(_req.multi_modal_data)} =============\n")
+                    f.write(f"============ multimodal data: {_req.multi_modal_data} =============\n")
+                
                 # Video support is not implemented yet
                 image_data = (
                     _req.multi_modal_data["image"]
@@ -883,7 +929,9 @@ class SGLangRollout(BaseRollout):
                     logger.warning(
                         "video support is not implemented yet, current length of video data is %d", len(video_data)
                     )
-
+                print(f"============ Image data length: {len(image_data) if image_data else 0} =============")
+                print(f"============ Image type: {type(image_data) if image_data else 'None'} =============")
+                
                 output = await self._handle_engine_call(_req, request_sampling_params, image_data=image_data)
                 content = output["text"]
                 finish_reason_type = FinishReasonTypeEnum.from_str(output["meta_info"]["finish_reason"]["type"])
@@ -998,6 +1046,8 @@ class SGLangRollout(BaseRollout):
         self, _req: AsyncRolloutRequest, sampling_params: dict, image_data: Optional[list[Any]] = None
     ) -> dict:
         generation_prompt_ids = _req.get_generation_prompt_ids(self.processing_class)
+        print(f"============ Generation prompt IDs length: {len(generation_prompt_ids)} =============")
+        # print(f"============ Generation prompt IDs: {generation_prompt_ids} =============")
         return await self._handle_engine_generate(generation_prompt_ids, sampling_params, image_data)
 
     async def _handle_engine_generate(

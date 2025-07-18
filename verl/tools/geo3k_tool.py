@@ -16,9 +16,11 @@
 
 import logging
 import os
+from io import BytesIO
 from typing import Any, Optional
 from uuid import uuid4
 
+from PIL import Image
 from verl.utils.reward_score import geo3k
 from verl.utils.rollout_trace import rollout_trace_op
 
@@ -86,6 +88,30 @@ class Geo3kTool(BaseTool):
         # update the reward
         self._instance_dict[instance_id]["reward"] = reward
         return f"Current parsed {answer=} {reward=}", tool_reward, {}
+
+    @rollout_trace_op
+    async def execute(self, instance_id: str, parameters: dict[str, Any], **kwargs) -> dict:
+        answer = parameters.get("answer", "")
+        if not isinstance(answer, str):
+            answer = str(answer)
+        self._instance_dict[instance_id]["response"] = answer
+        reward = await self.calc_reward(instance_id)
+        tool_reward = 0.0 if reward > self._instance_dict[instance_id]["reward"] else -0.05
+        self._instance_dict[instance_id]["reward"] = reward
+
+        # 生成空白图像
+        blank_image = Image.new('RGB', (400, 300), color='white')
+
+        # 转为符合 `Image.open(BytesIO(byte_data)).convert("RGB")` 的格式
+        image_buffer = BytesIO()
+        blank_image.save(image_buffer, format='PNG')
+        image_buffer.seek(0)  # 重置指针
+        image = Image.open(image_buffer).convert("RGB")  # 得到目标格式
+
+        return {
+            "text": f"Current parsed {answer=} {reward=}",
+            "image": [image]  # 直接返回图像对象（可以被 Image.open(BytesIO(...)) 使用）
+        }, tool_reward, {}
 
     async def calc_reward(self, instance_id: str, **kwargs) -> float:
         return geo3k.compute_score(

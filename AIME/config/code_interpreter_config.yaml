@@ -1,13 +1,14 @@
 tools:
   - class_name: "AIME.tools.remote_code_interpreter.RemoteCodeInterpreter"
     config: 
-      # Remote service configuration
-      service_url: "http://localhost:8001"  # Remote service address
-      timeout: 10  # Request timeout (seconds)
-      max_retries: 3  # Maximum retry count
-      retry_delay: 1.0  # Retry delay (seconds)
-      session_timeout: 1800  # Session timeout (seconds)
-      reuse_sessions: true  # Whether to reuse sessions
+      # 远程服务配置
+      service_url: "http://localhost:8001"  # 远程服务地址
+      timeout: 15  # 请求超时时间（秒）
+      max_retries: 5  # 最大重试次数
+      retry_delay: 1.0  # 重试延迟时间（秒）
+      session_timeout: 1800  # 会话超时时间（秒）
+      reuse_sessions: true  # 是否复用会话
+      type: native
     tool_schema:
       type: "function"
       function:
@@ -19,3 +20,4 @@ tools:
             code:
               type: "string"
               description: "The Python code string to be submitted and executed in the remote Jupyter Notebook."
+          required: ["code"]

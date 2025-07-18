@@ -105,7 +105,7 @@ class RemoteCodeInterpreter(BaseTool):
         logger.info(f"初始化远程代码解释器，服务地址: {self.service_config.service_url}")
 
         # 启动后台清理任务
-        self._cleanup_task = asyncio.create_task(self._cleanup_expired_sessions())
+        # self._cleanup_task = asyncio.create_task(self._cleanup_expired_sessions())
 
     def get_openai_tool_schema(self) -> OpenAIFunctionToolSchema:
         return self.tool_schema
@@ -279,18 +279,20 @@ class RemoteCodeInterpreter(BaseTool):
         """格式化执行结果"""
 
         result_parts = []
+        print(f"============ content_to_agent: {content_to_agent} =============")
         for item in content_to_agent:
             item_type = item.get("type", "unknown")
 
             if item_type == "text":
                 text = item.get("text", "")
                 result_parts.append({'type': 'text', 'text': text})
-            elif item_type == "image":
-                image_url = item.get("image_url")
+            elif item_type == "image_url":
+                image_url = item.get("image_url").get("url", "")
                 image = base64_to_image(image_url)
                 image = scaling_image_by_max_size(image ,max_size=512)
                 
                 result_parts.append({'type': 'image', 'image': image})
+        print(f"============ result_parts: {result_parts} =============")
         return result_parts
                 
 
@@ -299,7 +301,11 @@ class RemoteCodeInterpreter(BaseTool):
 
     async def calc_reward(self, instance_id: str, **kwargs) -> str:
         """计算奖励"""
+<<<<<<< Updated upstream
         return None
+=======
+        return "0.0"
+>>>>>>> Stashed changes
 
     async def release(self, instance_id: str, **kwargs) -> None:
         """释放工具实例"""

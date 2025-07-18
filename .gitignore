@@ -124,3 +124,9 @@ logs
 log
 outputs
 .history
+model
+advanced_demo_creator.py
+.gitignore
+core.376660
+create_demo_dataset.py
+demo_config.json

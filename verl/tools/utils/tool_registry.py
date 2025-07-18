@@ -105,3 +105,26 @@ def initialize_tools_from_config(tools_config_file):
             case _:
                 raise NotImplementedError
     return tool_list
+
+
+if __name__ == "__main__":
+    tool_config_file = "/mnt/aime/user_workspace/shujiangming/verl_vl_multi_turn/examples/sglang_multiturn/config/tool_config/geo3k_tool_config.yaml"
+    tool_list = initialize_tools_from_config(tool_config_file)
+    # for tool in tools:
+    #     logger.info(f"Initialized tool: {tool.tool_schema.name} with type {tool.tool_type}")
+    # print(f"Total tools initialized: {len(tools)}")
+    # for tool in tools:
+    #     print(tool.get_openai_tool_schema().model_dump())
+    tool_schemas = [tool.get_openai_tool_schema().model_dump() for tool in tool_list]
+    tool_map = {tool.name: tool for tool in tool_list}
+    
+    print(tool_schemas)
+    print(tool_map)
+    try:
+        from sglang.srt.entrypoints.openai.protocol import Tool
+    except ImportError:
+        from sglang.srt.openai_api.protocol import Tool
+    sgl_tools = [Tool.model_validate(tool_schema) for tool_schema in tool_schemas]
+    print(sgl_tools)
+    
+    
