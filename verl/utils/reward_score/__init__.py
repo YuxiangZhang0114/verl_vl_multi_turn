@@ -85,7 +85,7 @@ def default_compute_score(
 
             # Assuming prime_code doesn't need the URL
             res = prime_code.compute_score(solution_str, ground_truth, continuous=True)
-    elif data_source in ["hiyouga/geometry3k", "/mnt/aime/user_workspace/shujiangming/verl_vl_multi_turn/data/geometry3k"]:
+    elif data_source in ["hiyouga/geometry3k", "/mnt/aime/user_workspace/shujiangming/verl_vl_multi_turn/data/geometry3k", "plot2code"]:
         from . import geo3k
 
         res = geo3k.compute_score(solution_str, ground_truth)

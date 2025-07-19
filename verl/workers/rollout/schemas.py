@@ -417,8 +417,6 @@ class AsyncRolloutRequest(BaseModel):
         # We require the processing of the image and video to be done at tool.execute() level
         delta_multi_modal_data = {key: [] for key in self.multi_modal_keys}
         new_messages_len = 0
-        print(f"============ contents types: {type(contents)} =============")
-        print(f"============ contents: {contents} =============")
         for contents_ in contents:
             new_messages_len += len(contents_)
             content_list = []
