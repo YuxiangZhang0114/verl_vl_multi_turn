@@ -1024,6 +1024,11 @@ class SGLangRollout(BaseRollout):
 
         if current_turns >= self.config.multi_turn.max_assistant_turns:
             finish_reason_type = FinishReasonTypeEnum.STOP
+            
+        check_completed_request_flag = True
+        if check_completed_request_flag:
+            print(f"============ CHECK COMPLETED REQUEST =============")
+            ppq = _req.output_completed_request(self.processing_class)
 
         # Calculate the reward for each tool
         async def calc_reward_and_release_fn(name: str, tool: BaseTool):
@@ -1047,7 +1052,8 @@ class SGLangRollout(BaseRollout):
     ) -> dict:
         generation_prompt_ids = _req.get_generation_prompt_ids(self.processing_class)
         print(f"============ Generation prompt IDs length: {len(generation_prompt_ids)} =============")
-        # print(f"============ Generation prompt IDs: {generation_prompt_ids} =============")
+        # generation_prompt_text = self.processing_class.decode(generation_prompt_ids, skip_special_tokens=False)
+        # print(f"============ Generation prompt text: {generation_prompt_text} =============")
         return await self._handle_engine_generate(generation_prompt_ids, sampling_params, image_data)
 
     async def _handle_engine_generate(

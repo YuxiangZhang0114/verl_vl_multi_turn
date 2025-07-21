@@ -416,9 +416,7 @@ class AsyncRolloutRequest(BaseModel):
         # We also handle the case when tool returns image
         # We require the processing of the image and video to be done at tool.execute() level
         delta_multi_modal_data = {key: [] for key in self.multi_modal_keys}
-        new_messages_len = 0
         for contents_ in contents:
-            new_messages_len += len(contents_)
             content_list = []
             for content in contents_:
                 if isinstance(content, dict):
@@ -459,7 +457,7 @@ class AsyncRolloutRequest(BaseModel):
                 
         print(f"============ After tool call delta_multi_data  {delta_multi_modal_data} =============")
 
-        messages = [*BASE_CHAT_HISTORY, *self.messages[-new_messages_len :]]
+        messages = [*BASE_CHAT_HISTORY, *self.messages[-len(contents) :]]
         tools = [tool.model_dump() for tool in self.tool_schemas] if self.tool_schemas else None
 
         for key in self.multi_modal_keys:
@@ -681,3 +679,57 @@ class AsyncRolloutRequest(BaseModel):
             ..., : self.max_response_len
         ]
         self.response_loss_mask = self.loss_mask[..., self.prompt_loss_mask.shape[-1] :][..., : self.max_response_len]
+
+
+    def output_completed_request(self, processing_class: PreTrainedTokenizer | PreTrainedTokenizerFast | ProcessorMixin):
+        """Output the completed request to the processing class."""
+        # Decode input_ids to get the complete input text
+        print(f"================ length of input_ids: {self.input_ids.shape[-1]} ================")
+        # print(f"================ length of prompt_ids: {self.prompt_ids.shape[-1]} ================")
+        if self.input_ids is not None:
+            print(f"================ Now decoding input_ids ================")
+            input_text = processing_class.decode(self.input_ids.squeeze(0), skip_special_tokens=False)
+            logger.info(f"Request {self.request_id} - Complete Input Text:")
+            logger.info(f"Input IDs shape: {self.input_ids.shape}")
+            logger.info(f"Input Text: {repr(input_text)}")
+            print(f"================ Request {self.request_id} - Complete Input Text: ================")
+            print(f"================ Input IDs shape: {self.input_ids.shape} ================")
+            print(f"================ Input Text: {repr(input_text)} ================")
+        
+        # Decode response_ids to get the complete response text
+        if self.response_ids is not None:
+            response_text = processing_class.decode(self.response_ids.squeeze(0), skip_special_tokens=False)
+            logger.info(f"Request {self.request_id} - Complete Response Text:")
+            logger.info(f"Response IDs shape: {self.response_ids.shape}")
+            logger.info(f"Response Text: {repr(response_text)}")
+        
+        # Decode prompt_ids to get the prompt text
+        if self.prompt_ids is not None:
+            prompt_text = processing_class.decode(self.prompt_ids.squeeze(0), skip_special_tokens=False)
+            logger.info(f"Request {self.request_id} - Prompt Text:")
+            logger.info(f"Prompt IDs shape: {self.prompt_ids.shape}")
+            logger.info(f"Prompt Text: {repr(prompt_text)}")
+        
+        # Output additional information
+        logger.info(f"Request {self.request_id} - Summary:")
+        logger.info(f"State: {self.state}")
+        logger.info(f"Finish reason: Available in reward_scores")
+        logger.info(f"Number of messages: {len(self.messages)}")
+        logger.info(f"Tool schemas count: {len(self.tool_schemas) if self.tool_schemas else 0}")
+        logger.info(f"Multi-modal data keys: {list(self.multi_modal_data.keys()) if self.multi_modal_data else 'None'}")
+        logger.info(f"Metrics: {self.metrics}")
+        
+        return {
+            "request_id": self.request_id,
+            "input_text": input_text if self.input_ids is not None else None,
+            "response_text": response_text if self.response_ids is not None else None,
+            "prompt_text": prompt_text if self.prompt_ids is not None else None,
+            "input_ids_shape": self.input_ids.shape if self.input_ids is not None else None,
+            "response_ids_shape": self.response_ids.shape if self.response_ids is not None else None,
+            "prompt_ids_shape": self.prompt_ids.shape if self.prompt_ids is not None else None,
+            "state": self.state,
+            "messages_count": len(self.messages),
+            "tool_schemas_count": len(self.tool_schemas) if self.tool_schemas else 0,
+            "multi_modal_keys": list(self.multi_modal_data.keys()) if self.multi_modal_data else None,
+            "metrics": self.metrics
+        }

@@ -101,6 +101,7 @@ class NaiveRewardManager:
                 already_print_data_sources[data_source] = 0
 
             if already_print_data_sources[data_source] < self.num_examine:
+                print(f"========================== now examining {already_print_data_sources[data_source]} ==========================")
                 already_print_data_sources[data_source] += 1
                 print("[prompt]", prompt_str)
                 print("[response]", response_str)
