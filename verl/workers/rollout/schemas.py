@@ -291,6 +291,28 @@ class AsyncRolloutRequest(BaseModel):
             return new_position_ids  # (3, seq_len)
         else:
             return compute_position_id_with_mask(attention_mask)  # (1, seq_len)
+        
+    def visualize_token_masks_to_file(self, input_ids, attention_mask, loss_mask, processing_class, filepath="token_mask_debug.txt"):
+        
+        # input_tokens = processing_class.tokenizer.convert_ids_to_tokens(input_ids.squeeze(0).tolist())
+        input_tokens = [processing_class.tokenizer.decode([tid]) for tid in input_ids[0]]
+        input_text = processing_class.decode(input_ids.squeeze(0), skip_special_tokens=False)
+        attn = attention_mask.squeeze(0).tolist()
+        loss = loss_mask.squeeze(0).tolist()
+        
+        with open(filepath, "a", encoding="utf-8") as f:
+            f.write(f"=============================================================\nInput Text: {input_text}\n")
+            f.write(f"===================Mask====================\n")
+            f.write(f"{'Index':>5} | {'Token':20} | {'Attn':^5} | {'Loss':^5}\n")
+            f.write("-" * 45 + "\n")
+            for i, (tok, a, l) in enumerate(zip(input_tokens, attn, loss)):
+                a_mark = "✓" if a else "✗"
+                l_mark = "✓" if l else "✗"
+                f.write(f"{i:5} | {tok:20} |  {a_mark:^3}  |  {l_mark:^3}\n")
+                
+            f.write("-" * 45 + "\n\n\n")
+        
+        print(f"[✔] Token mask information written to {filepath}")
 
     def _update_input_ids(
         self,
@@ -320,7 +342,12 @@ class AsyncRolloutRequest(BaseModel):
         new_position_ids = new_position_ids + (last_pos + 1)
 
         self.position_ids = torch.cat([self.position_ids, new_position_ids], dim=-1)
-
+        
+        visualize_mask_token = False
+        if visualize_mask_token:
+            self.visualize_token_masks_to_file(
+                self.input_ids, self.attention_mask, self.loss_mask, processing_class, filepath="token_mask_debug_new.txt"
+            )
         assert (
             self.input_ids.shape[-1]
             == self.attention_mask.shape[-1]
