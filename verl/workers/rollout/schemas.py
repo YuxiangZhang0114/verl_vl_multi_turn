@@ -367,6 +367,25 @@ class AsyncRolloutRequest(BaseModel):
                 if key in self.multi_modal_inputs
                 else input_tensor
             )
+            
+    def _delete_multi_modal_inputs(self, del_multi_modal_inputs: dict[str, torch.Tensor]) -> None:
+        """
+        Delete the specified keys from multi_modal_inputs.
+        """
+        
+        for key, del_tensor in del_multi_modal_inputs.items():
+            if key not in self.multi_modal_inputs:
+                continue
+            
+            original_tensor = self.multi_modal_inputs[key]
+            num_to_delete = del_tensor.shape[0]
+            num_total = original_tensor.shape[0]
+
+            if num_to_delete > num_total:
+                raise ValueError(
+                    f"[delete] Trying to delete more entries ({num_to_delete}) than exist ({num_total}) for key '{key}'.")
+
+            self.multi_modal_inputs[key] = original_tensor[:num_total - num_to_delete]
 
     def get_generation_prompt_ids(
         self, processing_class: PreTrainedTokenizer | PreTrainedTokenizerFast | ProcessorMixin
@@ -694,18 +713,67 @@ class AsyncRolloutRequest(BaseModel):
     def truncate_output_ids(
         self, processing_class: PreTrainedTokenizer | PreTrainedTokenizerFast | ProcessorMixin
     ) -> None:
-        self.input_ids = self.input_ids[..., : self.max_model_len]
-        self.attention_mask = self.attention_mask[..., : self.max_model_len]
-        self.position_ids = self.position_ids[..., : self.max_model_len]
-        self.loss_mask = self.loss_mask[..., : self.max_model_len]
-        self.response_ids = self.input_ids[..., self.prompt_ids.shape[-1] :][..., : self.max_response_len]
+        
+        image_start_token_id = processing_class.tokenizer.convert_tokens_to_ids("<|vision_start|>")
+        image_end_token_id = processing_class.tokenizer.convert_tokens_to_ids("<|vision_end|>")
+        image_pad_token_id = processing_class.tokenizer.convert_tokens_to_ids("<|image_pad|>")
+        
+        truncate_pos = self.max_model_len
+        truncate_response_pos = self.max_response_len
+        discard_image_num_response = 0
+        
+        if self.input_ids.shape[-1] - self.prompt_ids.shape[-1] > self.max_response_len:
+            input_ids = self.input_ids.squeeze(0)
+            for i in range(self.prompt_ids.shape[-1] + truncate_response_pos, len(input_ids), 1):
+                if input_ids[i] == image_end_token_id:
+                    discard_image_num_response += 1
+            if input_ids[self.prompt_ids.shape[-1] + truncate_response_pos - 1] in (
+                image_start_token_id,
+                image_pad_token_id
+            ):
+                for i in range(self.prompt_ids.shape[-1] + truncate_response_pos - 1, self.prompt_ids.shape[-1] - 1, -1):
+                    if input_ids[i] == image_start_token_id:
+                        truncate_response_pos = i - self.prompt_ids.shape[-1]
+                        break
+        
+        
+        self.input_ids = self.input_ids[..., : truncate_pos]
+        self.attention_mask = self.attention_mask[..., : truncate_pos]
+        self.position_ids = self.position_ids[..., : truncate_pos]
+        self.loss_mask = self.loss_mask[..., : truncate_pos]    
+        self.response_ids = self.input_ids[..., self.prompt_ids.shape[-1] :][..., : truncate_response_pos]
         self.response_attention_mask = self.attention_mask[..., self.prompt_attention_mask.shape[-1] :][
-            ..., : self.max_response_len
+            ..., : truncate_response_pos
         ]
         self.response_position_ids = self.position_ids[..., self.prompt_position_ids.shape[-1] :][
-            ..., : self.max_response_len
+            ..., : truncate_response_pos
         ]
-        self.response_loss_mask = self.loss_mask[..., self.prompt_loss_mask.shape[-1] :][..., : self.max_response_len]
+        self.response_loss_mask = self.loss_mask[..., self.prompt_loss_mask.shape[-1] :][..., : truncate_response_pos]
+        
+        if discard_image_num_response > 0:
+            delta_image = {"image": []}
+            # print(f"=========== 需要丢弃 {discard_image_num_response} 张图片 ===========")
+            # print(f"=========== type(self.multi_modal_data): {type(self.multi_modal_data)} ===========")
+            # print(f"=========== self.multi_modal_data.keys(): {self.multi_modal_data.keys()} ===========")
+            # print(f"=========== self.multi_modal_data['image']: {len(self.multi_modal_data['image'])} ===========")
+            delta_image["image"] = self.multi_modal_data["image"][-discard_image_num_response:]
+            messages = [*BASE_CHAT_HISTORY]
+            tools = [tool.model_dump() for tool in self.tool_schemas] if self.tool_schemas else None
+            multi_modal_inputs = self._handle_apply_chat_template(
+                processing_class,
+                messages,
+                multi_modal_data=delta_image,
+                tools=tools,
+                add_generation_prompt=False,
+                tokenize=True,
+                return_dict=True,
+            )
+            multi_modal_inputs.pop("input_ids", None)
+            multi_modal_inputs.pop("attention_mask", None)
+            self._delete_multi_modal_inputs(multi_modal_inputs)
+            self.multi_modal_data["image"] = self.multi_modal_data["image"][:-discard_image_num_response]
+
+            # print(f"=========== After multi-modal-data len : {len(self.multi_modal_data['image'])} ===========")
 
 
     def output_completed_request(self, processing_class: PreTrainedTokenizer | PreTrainedTokenizerFast | ProcessorMixin):

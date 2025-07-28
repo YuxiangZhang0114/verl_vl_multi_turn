@@ -3,7 +3,7 @@ tools:
     config: 
       # 远程服务配置
       service_url: "http://localhost:8001"  # 远程服务地址
-      timeout: 15  # 请求超时时间（秒）
+      timeout: 1800  # 请求超时时间（秒）
       max_retries: 5  # 最大重试次数
       retry_delay: 1.0  # 重试延迟时间（秒）
       session_timeout: 1800  # 会话超时时间（秒）

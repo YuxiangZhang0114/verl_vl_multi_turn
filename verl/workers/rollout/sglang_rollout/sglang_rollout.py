@@ -1025,7 +1025,7 @@ class SGLangRollout(BaseRollout):
         if current_turns >= self.config.multi_turn.max_assistant_turns:
             finish_reason_type = FinishReasonTypeEnum.STOP
             
-        check_completed_request_flag = True
+        check_completed_request_flag = False
         if check_completed_request_flag:
             print(f"============ CHECK COMPLETED REQUEST =============")
             ppq = _req.output_completed_request(self.processing_class)
@@ -1101,6 +1101,28 @@ class SGLangRollout(BaseRollout):
             stacklevel=2,
         )
         return self._req_level_generate_sequences(prompts, **kwargs)
+    
+    def visualize_token_masks_to_file(self, input_ids, attention_mask, loss_mask, processing_class, filepath="token_mask_debug.txt"):
+        
+        # input_tokens = processing_class.tokenizer.convert_ids_to_tokens(input_ids.squeeze(0).tolist())
+        input_tokens = [processing_class.tokenizer.decode([tid]) for tid in input_ids[0]]
+        input_text = processing_class.decode(input_ids.squeeze(0), skip_special_tokens=False)
+        attn = attention_mask.squeeze(0).tolist()
+        loss = loss_mask.squeeze(0).tolist()
+        
+        with open(filepath, "a", encoding="utf-8") as f:
+            f.write(f"=============================================================\nInput Text: {input_text}\n")
+            f.write(f"===================Mask====================\n")
+            f.write(f"{'Index':>5} | {'Token':20} | {'Attn':^5} | {'Loss':^5}\n")
+            f.write("-" * 45 + "\n")
+            for i, (tok, a, l) in enumerate(zip(input_tokens, attn, loss)):
+                a_mark = "✓" if a else "✗"
+                l_mark = "✓" if l else "✗"
+                f.write(f"{i:5} | {tok:20} |  {a_mark:^3}  |  {l_mark:^3}\n")
+                
+            f.write("-" * 45 + "\n\n\n")
+        
+        print(f"[✔] Token mask information written to {filepath}")
 
     @GPUMemoryLogger(role="sglang rollout", logger=logger)
     @torch.no_grad()
@@ -1252,6 +1274,20 @@ class SGLangRollout(BaseRollout):
         input_ids = torch.cat((prompt_ids, response_ids), dim=-1)
         attention_mask = torch.cat((prompt_attention_mask, response_attention_mask), dim=-1)
         position_ids = torch.cat((prompt_position_ids, response_position_ids), dim=-1)
+
+        wirte_to_check = True
+        if wirte_to_check:
+            with open("sglang_rollout.log", "a") as f:
+                for i in range(len(prompt_ids)):
+                    # prompt_text = self.processing_class.decode(prompt_ids[i], skip_special_tokens=False)
+                    response_text = self.processing_class.decode(response_ids[i], skip_special_tokens=False)
+                    inputs_text = self.processing_class.decode(input_ids[i], skip_special_tokens=False)
+                    # f.write(f"*****Prompt: \n{prompt_text}\n")
+                    f.write(f"*****Inputs: \n{inputs_text}\n")
+                    f.write(f"*****Response: \n{response_text}\n")
+                    f.write("-" * 45 + "\n\n\n")
+
+            print("successfully wrote sglang_rollout.log")
 
         # Construct the batch data
         batch = TensorDict(
